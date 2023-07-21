@@ -1,71 +1,54 @@
-provider "aws" {
-  region = "us-west-2" // Replace with your region
+variable "db_instance_identifier" {
+  description = "List of RDS instance identifiers"
+  type        = list(string)
+  default     = ["prod-db-1", "prod-db-2"]
 }
 
-data "aws_db_instance" "example1" {
-  db_instance_identifier = "mydbinstance1" // Replace with your DB Instance Identifier
+variable "sns_topic_arn" {
+  description = "The ARN of the SNS topic"
+  type        = string
+  default     = "arn:aws:sns:us-east-1:123456789012:MyTopic"
 }
 
-data "aws_db_instance" "example2" {
-  db_instance_identifier = "mydbinstance2" // Replace with your DB Instance Identifier
+data "aws_db_instance" "example" {
+  for_each = toset(var.db_instance_identifier)
+  db_instance_identifier = each.key
 }
 
-locals {
-  common_alarm_config = {
-    evaluation_periods  = "2"
-    period              = "120"
-    statistic           = "Average"
-    alarm_description   = "CloudWatch alarm triggered."
-    alarm_actions       = ["arn:aws:sns:us-west-2:111122223333:my-topic"] // Replace with your SNS Topic ARN
-  }
+resource "aws_cloudwatch_metric_alarm" "example" {
+  for_each = toset(var.db_instance_identifier)
 
-  instances = {
-    "example1" = data.aws_db_instance.example1
-    "example2" = data.aws_db_instance.example2
-  }
-
-  alarms = {
-    cpu_utilization = {
-      metric        = "CPUUtilization"
-      operator      = "GreaterThanOrEqualToThreshold"
-      threshold     = "70"
-    }
-
-    free_storage_space = {
-      metric        = "FreeStorageSpace"
-      operator      = "LessThanOrEqualToThreshold"
-      threshold     = 1024 * 1024 * 1024 * 20 // 20 GB
-    }
-
-    freeable_memory = {
-      metric        = "FreeableMemory"
-      operator      = "LessThanOrEqualToThreshold"
-      threshold     = data.aws_db_instance.example1.db_instance_class * 1024 * 1024 * 1024 * 0.20 // 20% of instance's total memory
-    }
-  }
-}
-
-resource "aws_cloudwatch_metric_alarm" "alarm" {
-  for_each = { for k, v in local.instances : k => v }
-
-  alarm_name          = "${each.key}-${lookup(local.alarms[each.key], "metric", "")}-alarm"
-  comparison_operator = lookup(local.alarms[each.key], "operator", "")
-  metric_name         = lookup(local.alarms[each.key], "metric", "")
+  alarm_name          = "cpu-utilization-${each.key}"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = "2"
+  metric_name         = "CPUUtilization"
   namespace           = "AWS/RDS"
-  threshold           = lookup(local.alarms[each.key], "threshold", "")
+  period              = "60"
+  statistic           = "Average"
+  threshold           = "80"
+  alarm_description   = "This metric checks if CPU utilization is greater than 80%"
+  alarm_actions       = [var.sns_topic_arn]
+  
   dimensions = {
-    DBInstanceIdentifier = each.value.db_instance_identifier
+    DBInstanceIdentifier = each.key
   }
-  dynamic "alarm_description" {
-    for_each = local.common_alarm_config
-    content {
-      alarm_description = alarm_description.value
-    }
-  }
-  dynamic "alarm_actions" {
-    for_each = local.common_alarm_config
-    content {
-      alarm_actions = alarm_actions.value
-    }
+}
+
+resource "aws_cloudwatch_metric_alarm" "free_storage_space" {
+  for_each = toset(var.db_instance_identifier)
+
+  alarm_name          = "free-storage-space-${each.key}"
+  comparison_operator = "LessThanOrEqualToThreshold"
+  evaluation_periods  = "2"
+  metric_name         = "FreeStorageSpace"
+  namespace           = "AWS/RDS"
+  period              = "60"
+  statistic           = "Average"
+  threshold           = "${data.aws_db_instance.example[each.key].allocated_storage * 1024 * 1024 * 1024 * 0.2}" // 20% of total storage
+  alarm_description   = "This metric checks if free storage space is less than 20%"
+  alarm_actions       = [var.sns_topic_arn]
+  
+  dimensions = {
+    DBInstanceIdentifier = each.key
   }
 }
