@@ -1,0 +1,27 @@
+{
+    "Version": "2012-10-17",
+    "Id": "dip_msg_rcvr_qa_policy_ID",
+    "Statement": [
+        {
+            "Sid": "__owner_statement",
+            "Effect": "Allow",
+            "Principal": {"AWS": "arn:aws-us-gov:iam::${dip-aws-account}:user/DTC-service-account-1"},
+            "Action": "SQS:*",
+            "Resource": "${aws_sqs_queue.dip-msg-rcvr-qa.arn}"
+        },
+        {
+            "Sid": "__sender_statement",
+            "Effect": "Allow",
+            "Principal": {"AWS": "arn:aws-us-gov:iam::${dip-aws-account}:user/DTC-service-account-1"},
+            "Action": "SQS:*",
+            "Resource": "${aws_sqs_queue.dip-msg-rcvr-qa.arn}"
+        },
+        {
+            "Sid": "__receiver_statement",
+            "Effect": "Allow",
+            "Principal": {"AWS": "arn:aws-us-gov:iam::${dip-aws-account}:user/DTC-service-account-1"},
+            "Action": "SQS:*",
+            "Resource": "${aws_sqs_queue.dip-msg-rcvr-qa.arn}"
+        }
+    ]
+}
